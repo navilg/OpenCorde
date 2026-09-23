@@ -23,7 +23,7 @@ Translates OpenAI chat completion requests to AI Horde async text generation.
 **Request (OpenAI format):**
 ```json
 {
-  "model": "koboldcpp/LLaMA2-13B-Psyfighter2",
+  "model": "aihorde/koboldcpp/LLaMA2-13B-Psyfighter2",
   "messages": [
     {"role": "system", "content": "You are a helpful assistant."},
     {"role": "user", "content": "Once upon a time in a magical forest,"}
@@ -33,6 +33,10 @@ Translates OpenAI chat completion requests to AI Horde async text generation.
   "stream": false
 }
 ```
+
+Clients should use the model IDs returned by `/v1/models`. The interposer
+removes the public `aihorde/` prefix before submitting the translated request to
+AI Horde.
 
 **Translation to AI Horde format:**
 ```json
@@ -65,12 +69,12 @@ Lists available models with their capabilities from `/v2/workers`.
   "object": "list",
   "data": [
     {
-      "id": "koboldcpp/LLaMA2-13B-Psyfighter2",
+      "id": "aihorde/koboldcpp/LLaMA2-13B-Psyfighter2",
       "object": "model",
       "created": 1700000000,
       "owned_by": "ai-horde",
       "permission": [],
-      "root": "koboldcpp/LLaMA2-13B-Psyfighter2",
+      "root": "aihorde/koboldcpp/LLaMA2-13B-Psyfighter2",
       "parent": null,
       "capabilities": {
         "max_context_length": 4096,
@@ -93,7 +97,7 @@ Lists available models with their capabilities from `/v2/workers`.
 | `temperature` | `params.temperature` | Direct mapping |
 | `max_tokens` | `params.max_length` | Capped at 4096 |
 | `top_p` | `params.top_p` | Direct mapping |
-| `model` | `models` | Wrap in array |
+| `model` | `models` | Strip the public `aihorde/` prefix and wrap in array |
 | `frequency_penalty` | `params.rep_pen` | Approximate mapping |
 | `presence_penalty` | `params.rep_pen` | Approximate mapping |
 
@@ -161,7 +165,7 @@ openai_response = {
     "id": f"chatcmpl-{job_id}",
     "object": "chat.completion",
     "created": int(time.time()),
-    "model": original_model,
+    "model": public_model,
     "choices": [
         {
             "index": 0,

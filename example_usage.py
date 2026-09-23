@@ -9,7 +9,11 @@ OpenAI-compatible requests to AI Horde.
 import asyncio
 import json
 from horde_openai import AIHordeClient, create_app
-from horde_openai.translate import convert_messages_to_prompt
+from horde_openai.translate import (
+    convert_messages_to_prompt,
+    translate_chat_request_to_horde,
+    translate_horde_response_to_chat,
+)
 
 
 async def example_direct_client():
@@ -42,12 +46,19 @@ async def example_direct_client():
             {"role": "user", "content": "Once upon a time in a magical forest,"},
         ]
 
-        # The client handles translation and polling automatically
-        response = await client.chat_completion(
+        public_model = "aihorde/koboldcpp/LLaMA2-13B-Psyfighter2"
+        horde_model = public_model.removeprefix("aihorde/")
+        payload = translate_chat_request_to_horde(
             messages=messages,
-            model="koboldcpp/LLaMA2-13B-Psyfighter2",
-            max_tokens=50,
-            temperature=0.7,
+            model=horde_model,
+            params={"max_tokens": 50, "temperature": 0.7},
+            model_registry=client.model_registry,
+        )
+        generations = await client.submit_and_wait(payload)
+        response = translate_horde_response_to_chat(
+            generations=generations,
+            model=public_model,
+            original_prompt=payload["prompt"],
         )
 
         print("\nResponse:")
@@ -62,7 +73,7 @@ async def example_translation():
 
     # OpenAI request format
     openai_request = {
-        "model": "koboldcpp/LLaMA2-13B-Psyfighter2",
+        "model": "aihorde/koboldcpp/LLaMA2-13B-Psyfighter2",
         "messages": [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Write a short story about a dragon."},
