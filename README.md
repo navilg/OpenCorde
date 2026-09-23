@@ -51,17 +51,24 @@ You WILL randomly hit 403 errors if this is not specified, it's not a bug.
 curl -X POST http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "awsome_engine/splendid_model",
+    "model": "aihorde/awsome_engine/splendid_model",
     "messages": [{"role": "user", "content": "Hello! How are you?"}],
     "max_tokens": 50
   }'
 ```
+
+Use the model IDs returned by `/v1/models`. AI Horde models are exposed with the
+`aihorde/` prefix; the interposer strips that prefix before sending the request
+to AI Horde.
 
 ### 3. List Models
 
 ```bash
 curl http://localhost:8080/v1/models
 ```
+
+Model IDs are returned in OpenAI-compatible provider form, for example
+`aihorde/koboldcpp/Fimbulvetr-11B-v2`.
 
 ## OpenCode Integration
 
@@ -114,7 +121,7 @@ HordeStreaming/
 
 ```json
 {
-  "model": "koboldcpp/Fimbulvetr-11B-v2",
+  "model": "aihorde/koboldcpp/Fimbulvetr-11B-v2",
   "messages": [
     {"role": "system", "content": "You are helpful."},
     {"role": "user", "content": "Tell me a joke."}
@@ -128,7 +135,8 @@ HordeStreaming/
 
 **GET** `/v1/models`
 
-Returns all available text generation models with their capabilities.
+Returns all available text generation models with their capabilities. Every
+returned model ID is prefixed with `aihorde/` for OpenAI-compatible clients.
 
 ## How It Works
 

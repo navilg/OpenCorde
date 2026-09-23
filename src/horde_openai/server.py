@@ -26,6 +26,19 @@ from .translate import (
 
 # Global client instance
 _client: Optional[AIHordeClient] = None
+AI_HORDE_MODEL_PREFIX = "aihorde/"
+
+
+def to_public_model_id(model_name: str) -> str:
+    """Return the OpenAI-facing AI Horde model ID."""
+    return f"{AI_HORDE_MODEL_PREFIX}{model_name}"
+
+
+def to_horde_model_id(model_name: str) -> str:
+    """Return the raw model ID expected by AI Horde."""
+    if model_name.startswith(AI_HORDE_MODEL_PREFIX):
+        return model_name[len(AI_HORDE_MODEL_PREFIX) :]
+    return model_name
 
 
 def get_client() -> AIHordeClient:
@@ -154,6 +167,12 @@ async def list_models():
         for model_name in model_list:
             model_info = client.get_model_info(model_name)
             if model_info:
+                public_model_id = to_public_model_id(model_name)
+                model_info = {
+                    **model_info,
+                    "id": public_model_id,
+                    "root": public_model_id,
+                }
                 models.append(ModelInfo(**model_info))
 
         return ModelListResponse(data=models)
@@ -171,15 +190,17 @@ async def create_chat_completion(request: ChatCompletionRequest):
     OpenAI-compatible response.
     """
     client = get_client()
+    horde_model = to_horde_model_id(request.model)
+    public_model = to_public_model_id(horde_model)
 
     # Convert messages to dict format
     messages = [msg.model_dump() for msg in request.messages]
 
     # Check if model is available in registry
-    capabilities = client.get_model_capabilities(request.model)
+    capabilities = client.get_model_capabilities(horde_model)
 
     # Verify model is actually registered (not a default fallback)
-    if request.model not in client.model_registry.list_models():
+    if horde_model not in client.model_registry.list_models():
         return JSONResponse(
             status_code=400,
             content=translate_error_response(
@@ -203,7 +224,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
         # Translate request to AI Horde format
         horde_payload = translate_chat_request_to_horde(
             messages=messages,
-            model=request.model,
+            model=horde_model,
             params={
                 "temperature": request.temperature,
                 "top_p": request.top_p,
@@ -227,7 +248,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
             # AI Horde doesn't support true streaming - return full response as single chunk
             chunks = translate_horde_response_to_chat_stream(
                 generations=generations,
-                model=request.model,
+                model=public_model,
                 original_prompt=original_prompt,
             )
 
@@ -245,7 +266,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
         else:
             response = translate_horde_response_to_chat(
                 generations=generations,
-                model=request.model,
+                model=public_model,
                 original_prompt=original_prompt,
             )
             return JSONResponse(content=response)
@@ -271,6 +292,11 @@ async def create_chat_completion(request: ChatCompletionRequest):
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy"}
+
+@app.get("/v1/health")
+async def v1_health_check():
+    """Health check endpoint for /v1/health."""
+    return await health_check()
 
 
 @app.get("/")

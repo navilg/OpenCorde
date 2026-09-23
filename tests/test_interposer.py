@@ -1,7 +1,10 @@
 """Unit tests for the AI Horde OpenAI Interposer Layer."""
 
+import asyncio
+import json
+
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from horde_openai.translate import (
     convert_messages_to_prompt,
@@ -348,3 +351,75 @@ class TestServerModels:
         assert request.max_tokens == 100
         assert request.n == 1
         assert request.stream is False
+
+    def test_list_models_prefixes_ai_horde_model_ids(self):
+        """Test model listing exposes namespaced AI Horde model IDs."""
+        from horde_openai.server import list_models
+
+        mock_client = MagicMock()
+        mock_client.refresh_model_registry = AsyncMock()
+        mock_client.list_models.return_value = ["test/model", "aihorde/native"]
+
+        def get_model_info(model_name):
+            return {
+                "id": model_name,
+                "object": "model",
+                "created": 123,
+                "owned_by": "ai-horde",
+                "permission": [],
+                "root": model_name,
+                "parent": None,
+                "capabilities": {},
+            }
+
+        mock_client.get_model_info.side_effect = get_model_info
+
+        with patch("horde_openai.server.get_client", return_value=mock_client):
+            response = asyncio.run(list_models())
+
+        assert response.data[0].id == "aihorde/test/model"
+        assert response.data[0].root == "aihorde/test/model"
+        assert response.data[1].id == "aihorde/aihorde/native"
+        assert response.data[1].root == "aihorde/aihorde/native"
+
+    def test_chat_completion_strips_ai_horde_prefix_for_submission(self):
+        """Test prefixed model IDs are stripped before AI Horde submission."""
+        from horde_openai.server import ChatCompletionRequest, ChatMessage, create_chat_completion
+
+        mock_registry = MagicMock()
+        mock_registry.list_models.return_value = ["test/model"]
+        mock_registry.get_capabilities.return_value = ModelCapabilities(
+            max_context_length=4096,
+            max_generation_length=4096,
+            instruct_format="ChatML",
+            online=True,
+            trusted=False,
+        )
+
+        mock_client = MagicMock()
+        mock_client.model_registry = mock_registry
+        mock_client.get_model_capabilities.return_value = ModelCapabilities(
+            max_context_length=4096,
+            max_generation_length=4096,
+            instruct_format="ChatML",
+            online=True,
+            trusted=False,
+        )
+        mock_client.submit_and_wait = AsyncMock(
+            return_value=[{"text": "Hello", "internal_error": False, "truncated": False}]
+        )
+
+        request = ChatCompletionRequest(
+            model="aihorde/test/model",
+            messages=[ChatMessage(role="user", content="Hello")],
+        )
+
+        with patch("horde_openai.server.get_client", return_value=mock_client):
+            response = asyncio.run(create_chat_completion(request))
+
+        mock_client.get_model_capabilities.assert_called_once_with("test/model")
+        submitted_payload = mock_client.submit_and_wait.call_args.args[0]
+        assert submitted_payload["models"] == ["test/model"]
+
+        response_data = json.loads(response.body)
+        assert response_data["model"] == "aihorde/test/model"

@@ -1,0 +1,4 @@
+__pycache__
+.pytest_cache
+.venv
+src/horde_openai.egg-info
